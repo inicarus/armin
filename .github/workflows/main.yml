@@ -1,0 +1,60 @@
+name: Collect, Update, and Notify
+
+on:
+  # این بخش به شما اجازه می‌دهد تا به صورت دستی Workflow را از صفحه Actions اجرا کنید
+  workflow_dispatch:
+
+  # این بخش Workflow را هر 15 دقیقه یکبار به صورت خودکار اجرا می‌کند
+  schedule:
+    - cron: '*/15 * * * *'
+
+  # این بخش Workflow را بعد از هر push به شاخه اصلی اجرا می‌کند
+  push:
+    branches:
+      - working_ss_configs.txt # <<-- نام شاخه اصلی شما
+
+jobs:
+  build-and-notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      # مرحله ۱: کدهای ریپازیتوری را دانلود می‌کند
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # مرحله ۲: پایتون را نصب می‌کند
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      # مرحله ۳: کتابخانه‌های مورد نیاز را نصب می‌کند
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # مرحله ۴: اسکریپت جمع‌آوری کانفیگ‌ها را اجرا می‌کند
+      - name: Run config collector script
+        run: python config_collector.py
+
+      # مرحله ۵: تغییرات را در ریپازیتوری کامیت و پوش می‌کند
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name "GitHub Action Bot"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add working_ss_configs.txt sub.txt
+          # فقط در صورتی کامیت می‌کند که تغییری در فایل‌ها ایجاد شده باشد
+          if ! git diff --staged --quiet; then
+            git commit -m "✅ Update SS configs"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+      
+      # مرحله ۶: اسکریپت ربات تلگرام را اجرا می‌کند
+      - name: Send configs to Telegram
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+        run: python telegram_bot.py
