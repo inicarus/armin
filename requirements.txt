@@ -1,0 +1,6 @@
+requests
+beautifulsoup4
+pysocks
+python-telegram-bot
+python-dotenv
+pybase64

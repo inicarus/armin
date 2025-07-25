@@ -1,0 +1,25 @@
+{
+  "telegram_channels": [
+    "@Alpha_V2ray_Iran",
+    "@proxystore11",
+    "@WarV2Ray",
+    "@Farah_VPN",
+    "@iMTProto",
+    "@DALTON_PING",
+    "@anty_filter",
+    "@PASARGAD_V2rayNG",
+    "@xixv2ray",
+    "@v2rayng_v2ray",
+    "@PrivateVPNs",
+    "@frev2ray"
+  ],
+  "subscription_links": [
+    "https://shadowmere.xyz/api/b64sub",
+    "https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_BASE64.txt",
+    "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity",
+    "https://raw.githubusercontent.com/T3stAcc/V2Ray/main/All_Configs_Base64.txt",
+    "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_base64.txt",
+    "https://raw.githubusercontent.com/soroushmirzaei/V2Ray-configs/main/All-Configs-base64",
+    "https://raw.githubusercontent.com/yebekhe/V2Hub/main/sub/all"
+  ]
+}
