@@ -6,30 +6,35 @@ from telegram import Bot
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
 
-# اطلاعات از GitHub Secrets خوانده می‌شود
+# --- ثابت‌ها ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-CONFIG_FILE = "working_ss_configs.txt"
+CONFIG_FILE = "all_configs.txt"  # <<-- نام فایل به روز شد
 
-def rename_config(config_uri):
-    """نام کانفیگ را به @proxyfig تغییر می‌دهد."""
-    # با استفاده از یک عبارت منظم، هر چیزی بعد از # را حذف و جایگزین می‌کند
-    return re.sub(r'#.*', '#@proxyfig', config_uri)
+def escape_markdown_v2(text):
+    """کاراکترهای خاص را برای MarkdownV2 فرار می‌دهد."""
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+
+def process_config(config_uri):
+    """نام کانفیگ را تغییر داده و آن را برای ارسال در تلگرام آماده می‌کند."""
+    # ۱. تغییر نام کانفیگ
+    renamed_config = re.sub(r'#.*', '#@proxyfig', config_uri)
+    # ۲. فرار دادن کاراکترهای خاص
+    return escape_markdown_v2(renamed_config)
 
 async def main():
     print("--- Starting Telegram Bot Script ---")
     if not all([BOT_TOKEN, CHANNEL_ID]):
-        print("🔴 ERROR: Bot token or channel ID not found in environment variables.")
+        print("🔴 ERROR: Bot token or channel ID not found.")
         return
-
-    print(f"✅ Bot Token and Channel ID are present. Channel ID: {CHANNEL_ID}")
 
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             configs = [line.strip() for line in f if line.strip()]
         print(f"✅ Successfully read {len(configs)} configs from {CONFIG_FILE}.")
     except FileNotFoundError:
-        print(f"🔴 ERROR: Config file '{CONFIG_FILE}' not found. No configs to send.")
+        print(f"🔴 ERROR: Config file '{CONFIG_FILE}' not found.")
         return
 
     if not configs:
@@ -40,33 +45,26 @@ async def main():
     random.shuffle(configs)
     selected_configs = configs[:15]
 
-    # ساخت پیام با فرمت جدید
-    # هر کانفیگ در یک بلاک کد جداگانه قرار می‌گیرد
-    message_parts = ["✅ **چند کانفیگ شدوساکس جدید:**\n"]
+    # ساخت پیام با فرمت کد بلاک و آماده برای MarkdownV2
+    message_parts = [escape_markdown_v2("✅ چند کانفیگ جدید برای شما:\n")]
     for config in selected_configs:
-        renamed_config = rename_config(config)
-        # هر کانفیگ را در یک بلاک کد جدا قرار می‌دهیم
-        # این فرمت در تلگرام دکمه کپی را نمایش می‌دهد
-        message_parts.append(f"```\n{renamed_config}\n```")
+        processed_config = process_config(config)
+        # فرمت صحیح برای کد بلاک در MarkdownV2
+        message_parts.append(f"```{processed_config}```")
     
-    # پیام نهایی با استفاده از دو خط جدید برای جداسازی
     message = "\n\n".join(message_parts)
 
     print("\n--- Preparing to send message ---")
-    print(f"Message length: {len(message)}")
-    print(f"Message preview: {message[:200]}...")
-
     try:
         await bot.send_message(
             chat_id=CHANNEL_ID, 
             text=message, 
-            parse_mode=ParseMode.MARKDOWN, # <<-- تغییر به Markdown ساده
-            disable_web_page_preview=True # برای جلوگیری از پیش‌نمایش لینک
+            parse_mode=ParseMode.MARKDOWN_V2, # <<-- تغییر به MarkdownV2
+            disable_web_page_preview=True
         )
         print(f"✅✅✅ Successfully sent {len(selected_configs)} configs to {CHANNEL_ID}.")
     except TelegramError as e:
-        print(f"🔴🔴🔴 FAILED to send message to Telegram!")
-        print(f"Error details: {e}")
+        print(f"🔴🔴🔴 FAILED to send message to Telegram! Error: {e}")
     except Exception as e:
         print(f"🔴🔴🔴 An unexpected error occurred: {e}")
 
