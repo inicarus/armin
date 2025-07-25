@@ -5,18 +5,18 @@ import requests
 from bs4 import BeautifulSoup
 
 # --- ثابت‌ها ---
-SS_PATTERN = r"ss://[^\s\"'<]+"
-VALID_OUTPUT_FILE = "working_ss_configs.txt" # برای لیست متنی ساده
-BASE64_SUB_FILE = "sub.txt" # برای لینک اشتراک کد شده با Base64
+# الگو برای پیدا کردن تمام پروتکل‌های رایج (vless, vmess, trojan, ss)
+CONFIG_PATTERN = r"(vless|vmess|trojan|ss)://[^\s\"'<]+"
+ALL_CONFIGS_FILE = "all_configs.txt"  # نام جدید برای فایل خروجی
+BASE64_SUB_FILE = "sub.txt"
 SOURCES_FILE = 'sources.json'
 
 # --- توابع کمکی ---
 def decode_base64(encoded_content):
-    """محتوای Base64 را با تلاش برای رمزگشایی‌های مختلف، دیکود می‌کند."""
+    """محتوای Base64 را با مدیریت padding به درستی دیکود می‌کند."""
     try:
         if isinstance(encoded_content, str):
             encoded_content = encoded_content.encode('utf-8')
-        # اضافه کردن padding در صورت نیاز
         padded_content = encoded_content + b'=' * (-len(encoded_content) % 4)
         return base64.b64decode(padded_content).decode('utf-8')
     except Exception:
@@ -24,112 +24,80 @@ def decode_base64(encoded_content):
 
 def is_syntactically_valid(config):
     """
-    بررسی می‌کند که آیا یک کانفیگ از نظر ساختاری معتبر است یا خیر.
+    بررسی می‌کند که آیا یک کانفیگ از نظر ساختاری اولیه معتبر است یا خیر.
     این تابع کانفیگ‌های ناقص، بریده شده یا بدشکل را فیلتر می‌کند.
     """
-    if not isinstance(config, str) or not config.startswith("ss://"):
+    if not isinstance(config, str):
         return False
-    # فیلتر کردن کانفیگ‌های ناقص که با ... تمام می‌شوند
-    if config.endswith("…") or config.endswith("..."):
+    # فیلتر کردن کانفیگ‌های ناقص
+    if config.endswith("…") or "..." in config:
         return False
-    
-    content_part = config.split('//')[1]
-    
-    # بررسی فرمت Base64
-    try:
-        # حذف نام کانفیگ قبل از دیکود کردن
-        if '#' in content_part:
-            content_part = content_part.split('#')[0]
-            
-        decoded_str = decode_base64(content_part)
-        if decoded_str:
-            # اگر محتوای دیکود شده JSON باشد (برای کانفیگ‌های با پلاگین)
-            try:
-                json.loads(decoded_str)
-                return True
-            except json.JSONDecodeError:
-                # اگر فرمت user:pass@host:port باشد
-                if '@' in decoded_str and ':' in decoded_str.split('@')[0]:
-                    return True
-        # اگر دیکود نشد، ممکن است فرمت غیر Base64 باشد
-        elif '@' in content_part and ':' in content_part.split('@')[0]:
+    # بررسی وجود بخش اصلی کانفیگ
+    if "@" not in config:
+        # استثنا برای VMess که می‌تواند فقط Base64 باشد
+        if "vmess://" in config:
             return True
-            
-    except Exception:
         return False
-        
-    return False
+    return True
 
 # --- توابع مربوط به جمع‌آوری ---
-def fetch_from_subscription_links(links):
-    """از لینک‌های اشتراک کانفیگ‌های شادوساکس را استخراج می‌کند."""
+def fetch_from_sources(sources):
+    """از لینک‌های اشتراک و کانال‌های تلگرام کانفیگ‌ها را استخراج می‌کند."""
     configs = set()
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'}
+    
+    # ۱. از لینک‌های اشتراک
     print("Fetching from subscription links...")
-    for link in links:
+    for link in sources.get('subscription_links', []):
         try:
-            response = requests.get(link, timeout=10)
+            response = requests.get(link, timeout=15, headers=headers)
             if response.status_code == 200:
-                # ابتدا تلاش برای دیکود کل محتوا به عنوان Base64
-                decoded_content = decode_base64(response.content)
-                found = re.findall(SS_PATTERN, decoded_content)
-                if found:
-                    configs.update(found)
-                else:
-                    # اگر محتوا Base64 نبود، آن را به عنوان لیست متنی ساده در نظر بگیر
-                    plain_content = response.text
-                    found = re.findall(SS_PATTERN, plain_content)
-                    configs.update(found)
-        except requests.RequestException as e:
+                content = response.text
+                decoded_content = decode_base64(content)
+                found_configs = re.findall(CONFIG_PATTERN, decoded_content or content)
+                configs.update(found_configs)
+        except Exception as e:
             print(f"  - ERROR fetching {link}: {e}")
-    return list(configs)
 
-def scrape_telegram_web_previews(channels):
-    """از پیش‌نمایش وب کانال‌های تلگرام کانفیگ‌ها را استخراج می‌کند."""
-    configs = set()
-    print("Fetching from Telegram web previews...")
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-    for channel in channels:
+    # ۲. از کانال‌های تلگرام
+    print("\nFetching from Telegram web previews...")
+    for channel in sources.get('telegram_channels', []):
         try:
-            channel_name = channel.replace('@', '')
-            url = f"https://t.me/s/{channel_name}"
+            url = f"https://t.me/s/{channel.replace('@', '')}"
             response = requests.get(url, headers=headers, timeout=15)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, "html.parser")
-                messages = soup.find_all("div", class_="tgme_widget_message_text")
-                code_blocks = soup.find_all("code")
-                for element in messages + code_blocks:
-                    found = re.findall(SS_PATTERN, element.get_text())
-                    configs.update(found)
-        except requests.RequestException as e:
+                elements = soup.find_all(["div", "code"], class_=["tgme_widget_message_text", "language-text"])
+                for element in elements:
+                    found_configs = re.findall(CONFIG_PATTERN, element.get_text())
+                    configs.update(found_configs)
+        except Exception as e:
             print(f"  - ERROR scraping {channel}: {e}")
+            
     return list(configs)
 
 # --- تابع اصلی ---
 def main():
-    with open(SOURCES_FILE, 'r') as f:
+    with open(SOURCES_FILE, 'r', encoding='utf-8') as f:
         sources = json.load(f)
 
     # گام ۱: جمع‌آوری
     print("--- Starting Config Collection ---")
-    telegram_configs = scrape_telegram_web_previews(sources['telegram_channels'])
-    subscription_configs = fetch_from_subscription_links(sources['subscription_links'])
-    
-    # ادغام و حذف موارد تکراری
-    all_configs = list(set(telegram_configs + subscription_configs))
+    all_configs = fetch_from_sources(sources)
     print(f"\nCollected {len(all_configs)} unique raw configs.")
 
     # گام ۲: اعتبارسنجی و فیلتر کردن
     print("\n--- Filtering Syntactically Valid Configs ---")
-    valid_configs = [config for config in all_configs if is_syntactically_valid(config)]
+    valid_configs = list(set([config for config in all_configs if is_syntactically_valid(config)]))
     print(f"Found {len(valid_configs)} syntactically valid configs.")
 
     # گام ۳: ذخیره‌سازی
     if valid_configs:
-        # ذخیره کانفیگ‌های معتبر در فرمت لیست متنی ساده
-        with open(VALID_OUTPUT_FILE, 'w', encoding='utf-8') as f:
+        # ذخیره تمام کانفیگ‌های معتبر در فرمت لیست متنی ساده
+        with open(ALL_CONFIGS_FILE, 'w', encoding='utf-8') as f:
             for config in valid_configs:
                 f.write(config + '\n')
-        print(f"\nSaved {len(valid_configs)} valid configs to {VALID_OUTPUT_FILE} (plain text).")
+        print(f"\nSaved {len(valid_configs)} valid configs to {ALL_CONFIGS_FILE}.")
 
         # ایجاد و ذخیره لینک اشتراک Base64
         sub_content = "\n".join(valid_configs)
