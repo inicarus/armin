@@ -6,7 +6,7 @@ on:
     - cron: '*/15 * * * *'
   push:
     branches:
-      - main
+      - main # شاخه اصلی شما
 
 jobs:
   build-and-notify:
@@ -29,10 +29,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # مرحله جدید: ساخت فایل‌های خالی برای جلوگیری از خطا
+      # ساخت فایل‌های خالی برای جلوگیری از خطا در صورت پیدا نشدن کانفیگ
       - name: Create placeholder files
-        run: |
-          touch all_configs.txt sub.txt
+        run: touch all_configs.txt sub.txt
 
       - name: Run config collector script
         run: python config_collector.py
@@ -41,9 +40,9 @@ jobs:
         run: |
           git config --global user.name "GitHub Action Bot"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # فایل جدید را اضافه کرده و فایل قدیمی را حذف می‌کنیم
           git add all_configs.txt sub.txt
           git rm --ignore-unmatch working_ss_configs.txt
-          
           if ! git diff --staged --quiet; then
             git commit -m "✅ Update All Configs"
             git push
