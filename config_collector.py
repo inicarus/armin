@@ -107,4 +107,4 @@ def main():
         encoded_sub = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
         with open(BASE64_SUB_FILE, 'w', encoding='utf-8') as f:
             f.write(encoded_sub)
-        print(f"Saved Base64 encoded subscription
+        print(f"Saved Base64 encoded subscription to {BASE64_SUB_FILE}.")
