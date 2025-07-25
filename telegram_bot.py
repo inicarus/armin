@@ -4,18 +4,17 @@ import random
 import asyncio
 from telegram import Bot
 from telegram.constants import ParseMode
+from telegram.error import TelegramError
 
 # اطلاعات از GitHub Secrets خوانده می‌شود
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 CONFIG_FILE = "working_ss_configs.txt"
 
-def rename_and_escape(config_uri):
-    """نام کانفیگ را تغییر داده و کاراکترهای خاص را برای MarkdownV2 فرار می‌دهد."""
-    renamed = re.sub(r'#.*', '#@proxyfig', config_uri)
-    # کاراکترهای خاص در MarkdownV2
-    escape_chars = '_*[]()~`>#+-=|{}.!'
-    return "".join(['\\' + char if char in escape_chars else char for char in renamed])
+def rename_config(config_uri):
+    """نام کانفیگ را به @proxyfig تغییر می‌دهد."""
+    # با استفاده از یک عبارت منظم، هر چیزی بعد از # را حذف و جایگزین می‌کند
+    return re.sub(r'#.*', '#@proxyfig', config_uri)
 
 async def main():
     print("--- Starting Telegram Bot Script ---")
@@ -23,8 +22,7 @@ async def main():
         print("🔴 ERROR: Bot token or channel ID not found in environment variables.")
         return
 
-    print(f"✅ Bot Token and Channel ID are present.")
-    print(f"Channel ID: {CHANNEL_ID}")
+    print(f"✅ Bot Token and Channel ID are present. Channel ID: {CHANNEL_ID}")
 
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -42,24 +40,35 @@ async def main():
     random.shuffle(configs)
     selected_configs = configs[:15]
 
-    message_parts = ["✅ *چند کانفیگ سالم Shadowsocks:*\n"]
+    # ساخت پیام با فرمت جدید
+    # هر کانفیگ در یک بلاک کد جداگانه قرار می‌گیرد
+    message_parts = ["✅ **چند کانفیگ شدوساکس جدید:**\n"]
     for config in selected_configs:
-        formatted_config = rename_and_escape(config)
-        message_parts.append(f"`{formatted_config}`")
+        renamed_config = rename_config(config)
+        # هر کانفیگ را در یک بلاک کد جدا قرار می‌دهیم
+        # این فرمت در تلگرام دکمه کپی را نمایش می‌دهد
+        message_parts.append(f"```\n{renamed_config}\n```")
     
+    # پیام نهایی با استفاده از دو خط جدید برای جداسازی
     message = "\n\n".join(message_parts)
-    
+
     print("\n--- Preparing to send message ---")
     print(f"Message length: {len(message)}")
-    # برای دیباگ، بخشی از پیام را نمایش می‌دهیم
-    print(f"Message preview: {message[:100]}...")
+    print(f"Message preview: {message[:200]}...")
 
     try:
-        await bot.send_message(chat_id=CHANNEL_ID, text=message, parse_mode=ParseMode.MARKDOWN_V2)
+        await bot.send_message(
+            chat_id=CHANNEL_ID, 
+            text=message, 
+            parse_mode=ParseMode.MARKDOWN, # <<-- تغییر به Markdown ساده
+            disable_web_page_preview=True # برای جلوگیری از پیش‌نمایش لینک
+        )
         print(f"✅✅✅ Successfully sent {len(selected_configs)} configs to {CHANNEL_ID}.")
-    except Exception as e:
+    except TelegramError as e:
         print(f"🔴🔴🔴 FAILED to send message to Telegram!")
         print(f"Error details: {e}")
+    except Exception as e:
+        print(f"🔴🔴🔴 An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
